@@ -1,6 +1,48 @@
 <?php
-//kPlaylist 1.8 Build 511 (21-06-13_14.27)
+//kPlaylist 1.8 Build 512 (20-03-15_23.54)
 
+/*****************************************************************************
+kPlaylist is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+kPlaylist is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with kPlaylist; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+##############################################################################
+
+kPlaylist makes your music archive available via the WEB. Play music, 
+	search, create and edit playlists from everywhere by just having a webbrowser 
+	and a audio player. Features include logon, accounts, account classes, user editor, 
+	automatic installation (MySQL), upload, download, archive download and much more.
+
+Are you a PHP programmer? 
+	Would you like to join us in the creation of this product? Before you start 
+	changing the code please send a mail to us and tell us that you want to help us. 
+	
+Note!
+	You can get updates and installation instructions here: http://www.kplaylist.net
+  
+	We develop other products than PHP applications, for commercial and non
+	commercial use. Contact our company FirstIT AS here: http://www.firstit.no
+
+Script information:
+	Also note, this is a script under construction and strange things may happen,
+	though it hasn't on the machines we tested it on. The system writes by
+	default only to a MySQL database, but can also be set up to write
+	id3v1 tags (mp3 files.).
+
+	Due to the legal responsibility however, we have to note: There
+	are NO GUARANTEES WHATSOEVER other than this application will
+	occupy certain amount of space on the device you put it.
+
+*****************************************************************************/
 
 // try to set the execution time to 86400 sec = 1 day. 
 @ini_set('max_execution_time', 86400);
@@ -14,8 +56,8 @@ $db = array(
 	'host' => 'localhost', # MySql server
 	'name' => 'kplaylist', # Database name
 	'user' => 'kplaylist', # MySql user
-	'pass' => 'kplaylist123', # MySql password
-	'prepend' => 'k_'    # To prepend before the table names
+	'pass' => 'kplaylist', # MySql password
+	'prepend' => 'tbl_'    # To prepend before the table names
 );
 
 
@@ -1791,7 +1833,7 @@ class kpwinjs
 		global $valuser, $setctl, $u_id, $u_cookieid, $cfg, $phpenv;
 
 		$this->pltype = $valuser->get('pltype');
-		
+				
 		switch($this->pltype) // init
 		{		
 			case 7:
@@ -1800,7 +1842,7 @@ class kpwinjs
 				$this->width = 	$cfg['jw_window_x'];
 				$this->height = $cfg['jw_window_y'];
 
-				$this->playlist .= PHPSELF.'?templist='.$u_id.'&amp;encode=true&amp;c='.$u_cookieid.'&amp;file='.lzero(getrand(1,999999),6).'.xml';
+				$this->playlist = PHPSELF.'?templist='.$u_id.'&amp;encode=true&amp;c='.$u_cookieid.'&amp;file='.lzero(getrand(1,999999),6).'.xml';
 				$this->openfw = 'openJWFLV(\''.$this->playlist.'\', \'?action=loadjw\', \''.$this->height.'\', \''.$this->width.'\');';
 
 				break;
@@ -2106,7 +2148,7 @@ class kptheme
 
 
 $app_ver  = 1.8;
-$app_build = 511;
+$app_build = 512;
 
 
 $kpdbtables = array('playlist', 'playlist_list', 'search', 'users', 'kplayversion', 'mhistory', 'config', 'filetypes', 'settings', 'bulletin', 'cache', 'session', 'iceradio', 'templist', 'network', 'archive', 'message', 'albumcache', 'genre');
@@ -3126,7 +3168,8 @@ class kpmysqltable
 			'login'			=> array('INT', 4, 1, '\'0\''),
 			'refreshed'		=> array('INT', 4, 1, '\'0\''),
 			'logout'		=> array('INT', 4, 1, '\'0\''),
-			'sstatus'		=> array('INT', 4, 1, '\'0\'')
+			'sstatus'		=> array('INT', 4, 1, '\'0\''),
+			'hkey'			=> array('VARCHAR', 128, 1, '\'\'')
 		);
 		 
 		$this->dbkeys[TBL_SESSION][] = 'PRIMARY KEY (`sessionid`)';
@@ -8860,9 +8903,23 @@ function settings_edit($reload = 0, $page = 0)
 }
 
 
+function gen_hkey()
+{
+	$hkey = '';
+	
+	$chars = '1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+	$len = strlen($chars);
+	$randmax = getrandmax();
+	srand((double)microtime()*1000000);
+
+	while (strlen($hkey) < 32) $hkey .= $chars[rand(0, $len - 1)];
+
+	return $hkey;
+}	
+
 function webauthenticate()
 {
-	global $u_cookieid, $phpenv, $setctl, $cfg, $u_id;
+	global $phpenv, $setctl, $cfg, $u_id;
 
 	$status = 0;
 	
@@ -8879,13 +8936,14 @@ function webauthenticate()
 				if ($kpu->loadbyuserpass($user, $pass))
 				{
 					$u_id = $kpu->getid();
-					
+					$hkey = gen_hkey();
+										
 					$kpdb = new kpdbconnection();
-					$kpdb->preparestmt('INSERT INTO '.TBL_SESSION.' SET u_id = ?, login = ?, refreshed = ?, ip = ?', $kpu->getid(), time(), time(), ip2long($phpenv['remote']));
+					$kpdb->preparestmt('INSERT INTO '.TBL_SESSION.' SET u_id = ?, hkey = "?", login = ?, refreshed = ?, ip = ?', $kpu->getid(), $hkey, time(), time(), ip2long($phpenv['remote']));
 					if ($kpdb->query())
 					{
-						$u_cookieid = $kpdb->getautoid();
-
+						$cookie_value = $kpdb->getautoid().'-'.$hkey;
+						
 						if ($kpu->get('u_access') != 2)
 						{
 							if ($cfg['numberlogins'] > 0)
@@ -8910,12 +8968,12 @@ function webauthenticate()
 							case 2: 
 								if (strlen(session_id()) > 0)
 								{
-									$_SESSION[$cfg['cookie']] = $u_id.'-'.$u_cookieid; 
+									$_SESSION[$cfg['cookie']] = $cookie_value; 
 									$status = 1;								
 								} else $status = 2;
 								break;
 							default: 
-								if (setcookie($cfg['cookie'], $u_id.'-'.$u_cookieid, $expiration)) $status = 1; else $status = 2;
+								if (setcookie($cfg['cookie'], $cookie_value, $expiration)) $status = 1; else $status = 2;
 								break;
 						}
 					} else $status = 2;
@@ -8976,12 +9034,13 @@ function db_verify_stream($cookie = '', $ip, $stream)
 	} else
 	{
 		$ckexp = explode('-', $cookie);
-		if (count($ckexp) == 2 && is_numeric($ckexp[0]) && is_numeric($ckexp[1]))
+		
+		if (count($ckexp) == 2 && is_numeric($ckexp[0]) && strlen($ckexp[1]) > 0)
 		{
 			if ($stream)
-				$sql = 'SELECT u_id, login as u_time, sstatus FROM '.TBL_SESSION.' WHERE u_id = '.$ckexp[0].' AND sessionid = '.$ckexp[1];
+				$sql = 'SELECT u_id, login as u_time, sstatus FROM '.TBL_SESSION.' WHERE sessionid = '.$ckexp[0].' AND hkey = "'.$ckexp[1].'"';
 			else 
-				$sql = 'SELECT u_id, login as u_time, sstatus FROM '.TBL_SESSION.' WHERE u_id = '.$ckexp[0].' AND sessionid = '.$ckexp[1].' AND logout = 0';
+				$sql = 'SELECT u_id, login as u_time, sstatus FROM '.TBL_SESSION.' WHERE sessionid = '.$ckexp[0].' AND hkey = "'.$ckexp[1].'" AND logout = 0';
 
 			$result = db_execquery($sql);
 			if ($result)
@@ -9088,9 +9147,9 @@ function chsessionstatus($cookie, $status=0)
 	global $cfg;
 	$ckexp = explode('-', $cookie);
 
-	if (count($ckexp) == 2 && is_numeric($ckexp[0]) && is_numeric($ckexp[1]))
+	if (count($ckexp) == 2 && is_numeric($ckexp[0]) && strlen($ckexp[1]) > 0)
 	{
-		db_execquery('UPDATE '.TBL_SESSION.' SET sstatus = '.$status.' WHERE sessionid = '.$ckexp[1]);
+		db_execquery('UPDATE '.TBL_SESSION.' SET sstatus = '.$status.' WHERE sessionid = '.$ckexp[0]);
 		return true;
 	}
 	return false;
@@ -9881,9 +9940,9 @@ class kpuser
 		{
 			$ckexp = explode('-', $cookie);
 
-			if (count($ckexp) == 2 && is_numeric($ckexp[0]) && is_numeric($ckexp[1]))
+			if (count($ckexp) == 2 && is_numeric($ckexp[0]) && strlen($ckexp[1]) > 0)
 			{	
-				db_execquery('UPDATE '.TBL_SESSION.' SET logout = '.time().' WHERE sessionid = '.$ckexp[1]);
+				db_execquery('UPDATE '.TBL_SESSION.' SET logout = '.time().' WHERE sessionid = '.$ckexp[0]);
 			}
 		}
 
@@ -9994,8 +10053,7 @@ class kpuser
 
 	function get($name)
 	{
-		if (isset($this->row[$name])) return $this->row[$name]; 
-			//else user_error('unknown entity: '.$name);
+		if (isset($this->row[$name])) return $this->row[$name]; 			
 	}
 
 	function gensql($type, $changesonly = true)
@@ -16086,7 +16144,7 @@ class kpxspf
 		$playlist = $setctl->get('streamurl').$phpenv['streamlocation'];		
 		$playlist .= '?templist='.$u_id.'&amp;c='.$u_cookieid.'&file='.lzero(getrand(1,999999),6).'.xml';
 
-		$link = $cfg['xspf_url'].'?autoplay=true&amp;autoload=true&amp;playlist_url='.urlencode($playlist);
+		$link = $cfg['xspf_url'].'?autoplay=1&amp;autoload=1&amp;playlist_url='.urlencode($playlist);
 
 		?>
 		<object classid="clsid:d27cdb6e-ae6d-11cf-96b8-444553540000" codebase="http://fpdownload.macromedia.com/pub/shockwave/cabs/flash/swflash.cab#version=7,0,0,0" width="400" height="200" id="xspf_player" align="middle">
